@@ -24,7 +24,7 @@ import butterknife.OnClick;
 
 public class MainActivity extends AppCompatActivity {
     private final String TAG = getClass().getSimpleName();
-    private final int REQ_CODE = 0;
+    private final int REQ_CODE = 0x00;
 
     @BindView(R.id.imageview)
     ImageView imageView;
@@ -45,6 +45,16 @@ public class MainActivity extends AppCompatActivity {
 
     @OnClick(R.id.button)
     void onClick() {
+        Intent chooser = new Intent(Intent.ACTION_CHOOSER);
+        Intent[] intents = new Intent[1];
+        intents[0] = createIntentImCapture();
+        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, intents);
+        chooser.putExtra(Intent.EXTRA_TITLE, "请选择图片");
+        chooser.putExtra(Intent.EXTRA_INTENT, createIntentPick());
+        startActivityForResult(chooser, REQ_CODE);
+    }
+
+    private Intent createIntentImCapture() {
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         String fileName = System.currentTimeMillis() + ".jpg";
         File file = new File(dir, fileName);
@@ -55,33 +65,41 @@ public class MainActivity extends AppCompatActivity {
         Uri uri = FileProvider.getUriForFile(this, "com.marklei.fileproviderdemo", file);  // content://xxx
         Log.d(TAG, "uri = " + uri);
         intent.putExtra(MediaStore.EXTRA_OUTPUT, uri);
-        startActivityForResult(intent, REQ_CODE);
+        return intent;
+    }
+
+    private Intent createIntentPick() {
+        return new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == REQ_CODE && resultCode == RESULT_OK) {
-            FileInputStream fis = null;
-            try {
-                fis = new FileInputStream(filePath);
-                Bitmap bitmap = BitmapFactory.decodeStream(fis);
-                // 图片旋转角度
-                int degree = getBitmapDegree(filePath);
-                Log.d(TAG, "degree = " + degree);
-                if (degree == 0) {
-                    imageView.setImageBitmap(bitmap);
-                } else {
-                    imageView.setImageBitmap(rotateBitmapByDegree(bitmap, -degree));
-                }
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } finally {
+            Log.d(TAG, "data = " + data);
+            if (data == null || data.getData() == null) {
+                FileInputStream fis = null;
                 try {
-                    fis.close();
-                } catch (IOException e) {
+                    fis = new FileInputStream(filePath);
+                    Bitmap bitmap = BitmapFactory.decodeStream(fis);
+                    // 图片旋转角度
+                    int degree = getBitmapDegree(filePath);
+                    Log.d(TAG, "degree = " + degree);
+                    imageView.setImageBitmap(rotateBitmapByDegree(bitmap, degree));
+                } catch (FileNotFoundException e) {
                     e.printStackTrace();
+                } finally {
+                    try {
+                        fis.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
+            } else {
+                Uri pickedIm = data.getData();
+                filePath = FileUtils.getAbsoluteImagePath(this, pickedIm);
+                imageView.setImageURI(pickedIm);
             }
+            Log.d(TAG, "filePath = " + filePath);
         }
     }
 
@@ -92,6 +110,7 @@ public class MainActivity extends AppCompatActivity {
      * @return 图片的旋转角度
      */
     private int getBitmapDegree(String path) {
+        Log.d(TAG, "getBitmapDegree, path = " + path);
         int degree = 0;
         try {
             // 从指定路径下读取图片，并获取其Exif信息
@@ -132,6 +151,7 @@ public class MainActivity extends AppCompatActivity {
             // 将原始图片按照旋转矩阵进行旋转，并得到新的图片
             returnBm = Bitmap.createBitmap(bm, 0, 0, bm.getWidth(), bm.getHeight(), matrix, true);
         } catch (OutOfMemoryError e) {
+            e.printStackTrace();
         }
         if (returnBm == null) {
             returnBm = bm;
